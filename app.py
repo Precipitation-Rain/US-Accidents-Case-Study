@@ -6,6 +6,13 @@ import plotly.express as px
 import seaborn as sns
 import matplotlib.pyplot as plt
 import duckdb
+import plotly.graph_objects as go
+
+st.set_page_config(
+    page_icon='🏛️',
+    page_title='US Accident Dashboard',
+    layout='wide'
+)
 
 
 @st.cache_resource
@@ -23,12 +30,6 @@ with st.sidebar:
         menu_icon="car-front",
         default_index=0,
     )
-
-st.set_page_config(
-    page_icon='🏛️',
-    page_title='US Accident Dashboard',
-    layout='wide'
-)
 
 
 if page == 'Home':
@@ -613,7 +614,7 @@ elif page == 'Weather':
     """).df()
     temp_df = temp_df.head(10)
 
-    fig = px.bar(temp_df , x = 'Weather_Condition' , y = 'Count' , title='Top 15 Weather Conditions')
+    fig = px.bar(temp_df , x = 'Count' , y = 'Weather_Condition' , title='Top 15 Weather Conditions')
     st.plotly_chart(fig)
     with st.expander("📊 View Data"):
         st.dataframe(temp_df)
@@ -675,40 +676,521 @@ elif page == 'Weather':
 
     st.markdown('---')
 
-    ## Low vsisbility accident Percentage
+    # ## Low vsisbility accident Percentage
 
-    temp_df = conn.execute("""
-    SELECT "Visibility(mi)"  FROM accidents.parquet             
-    """).df()
+    # temp_df = conn.execute("""
+    # SELECT "Visibility(mi)"  FROM accidents.parquet             
+    # """).df()
 
-    total_df = temp_df
+    # total_df = temp_df
 
-    temp_df = temp_df[temp_df['Visibility(mi)'] <= 1]
+    # temp_df = temp_df[temp_df['Visibility(mi)'] <= 1]
 
-    low_visibility_percentage = (temp_df.shape[0] / total_df.shape[0]) * 100
+    # low_visibility_percentage = (temp_df.shape[0] / total_df.shape[0]) * 100
 
-    st.title(f'Accidents happens due to Low Visisbility : {low_visibility_percentage : .2f}%')
-    st.markdown('----')
+    # st.title(f'Accidents happens due to Low Visisbility : {low_visibility_percentage : .2f}%')
+    # st.markdown('----')
 
-    # 
+    # Avg severiy by Visisbility
+
+    temp_df = conn.execute(""" SELECT Severity , AVG( "Visibility(mi)" ) as 'Avg_Visibility'  FROM accidents.parquet 
+                                GROUP BY Severity
+                                ORDER BY Avg_Visibility DESC
+                                """).df()
+    
+    fig  = px.bar(temp_df , x = 'Severity' , y = 'Avg_Visibility' , title='Avg severiy by Visisbility')
+    st.plotly_chart(fig)
+    with st.expander("📊 View Data"):
+        st.dataframe(temp_df)
+    st.markdown('---')
+    
+
+    # Temprature Category donut chart
+
+    temp_df = conn.execute(""" SELECT "Temperature(F)"  FROM accidents.parquet""").df()
+    bins = [-89 , 0 , 50 ,100, 207]
+    labels = ['Very_Low' , 'Low' , 'Medium' , 'High']
+    temp_df['Temp_Category'] = pd.cut(temp_df['Temperature(F)'] , bins=bins , labels=labels)
+
+    temp_df = temp_df.groupby('Temp_Category')['Temperature(F)'].count().reset_index(name='Accident_Count')
+
+
+    fig = px.pie(temp_df , values='Accident_Count', names='Temp_Category' , title='Temprature Category By Percentage')
+    st.plotly_chart(fig)
+    with st.expander("📊 View Data"):
+        st.dataframe(temp_df)
+    st.markdown('---')
+
+
+    # Severity Vs Wind_speed
+    temp_df = conn.execute(""" SELECT Severity , AVG("Wind_Speed(mph)") AS 'Avg_Wind_Speed'  FROM accidents.parquet 
+                                GROUP BY Severity """).df()
+    
+
+    fig = px.bar(temp_df,x='Severity' , y = 'Avg_Wind_Speed' , title='Severity Vs Wind_speed')
+    st.plotly_chart(fig)
+    with st.expander("📊 View Data"):
+        st.dataframe(temp_df)
+    st.markdown('---')
+
+
+    # Speed wind Distrobution
+
+    temp_df = conn.execute(""" SELECT "Wind_Speed(mph)" FROM accidents.parquet """).df()
+    
+
+    fig = px.histogram(temp_df,x='Wind_Speed(mph)' , title='Severity Vs Wind_speed')
+    st.plotly_chart(fig)
+    with st.expander("📊 View Data"):
+        st.dataframe(temp_df)
+    st.markdown('---')
 
 
 
 
-
-
-
-
-
+ 
 elif page == 'Road Features':
     st.title("🚦Road Features")
+
+    # Road Feature Frequency
+
+    temp_df = conn.execute("""
+    SELECT 
+        Amenity, Bump, Crossing, Give_Way, Junction,
+        No_Exit, Railway, Roundabout, Station, Stop,
+        Traffic_Calming, Traffic_Signal
+    FROM accidents.parquet
+    """).df()
+
+    features = [
+    'Amenity','Bump','Crossing','Give_Way','Junction',
+    'No_Exit','Railway','Roundabout','Station','Stop',
+    'Traffic_Calming','Traffic_Signal'
+    ]
+
+    feature_counts = []
+
+    for col in features:
+        count = temp_df[col].sum()   # True = 1, False = 0
+        feature_counts.append((col, count))
+
+    feature_df = pd.DataFrame(feature_counts, columns=['Feature', 'Count'])
+    feature_df = feature_df.sort_values('Count',ascending=False)
+
+    fig = px.bar(
+    feature_df,
+    x='Count',
+    y='Feature',
+    orientation='h',   # 👈 horizontal
+    title='Road Feature Frequency'
+    )
+
+    fig.update_layout(
+        # title_x=0.5,
+        bargap=0.3
+    )
+
+    st.plotly_chart(fig)
+    with st.expander("📊 View Data"):
+        st.dataframe(temp_df)
+    st.markdown('---')
+
+
+    # Road Feature vs Avg Severity
+
+    temp_df = conn.execute("""
+    SELECT 
+        Severity,
+        Amenity, Bump, Crossing, Give_Way, Junction,
+        No_Exit, Railway, Roundabout, Station, Stop,
+        Traffic_Calming, Traffic_Signal
+    FROM accidents.parquet
+    """).df()
+
+    feature_counts = []
+
+    for col in temp_df.columns:
+        if col == 'Severity':
+            continue
+
+        avg_severity = temp_df[temp_df[col] == True]['Severity'].mean()
+        feature_counts.append((col,avg_severity))
+
+    feature_df = pd.DataFrame(feature_counts , columns=['Column','Avg_Severity'])
+
+    fig = px.bar(feature_df , x = 'Column' , y = 'Avg_Severity' , title='Road Feature vs Avg Severity')
+    st.plotly_chart(fig)
+    with st.expander("📊 View Data"):
+        st.dataframe(temp_df)
+    st.markdown('---')
+
+
+
+
+    # Junction Vs Non Junction Severity
+
+    temp_df = conn.execute(""" SELECT  Junction , COUNT(*) AS 'Count' FROM accidents.parquet 
+                                GROUP BY Junction 
+                                ORDER BY Count DESC """).df()
+    
+    fig = px.bar(temp_df, x = 'Junction' , y = 'Count' , title='Junction Vs Non-Junction severity')
+
+    fig.update_layout(
+    bargap=0.5,        # space between bars (0 → no gap, 1 → max gap)
+    bargroupgap=0.2    # gap between grouped bars
+    )
+
+    st.plotly_chart(fig)
+    with st.expander("📊 View Data"):
+        st.dataframe(temp_df)
+    st.markdown('---')
+
+
+
+
+
+
+    # Crossing Vs Severity
+
+    temp_df = conn.execute("""  SELECT Crossing , AVG(Severity) AS 'Avg_Severity' FROM accidents.parquet 
+                                GROUP BY Crossing """).df()
+    
+
+    fig = px.bar(temp_df , x = 'Crossing' , y = 'Avg_Severity' , title='Crossing Vs Severity')
+
+    fig.update_layout(
+    bargap=0.5,        # space between bars (0 → no gap, 1 → max gap)
+    bargroupgap=0.2    # gap between grouped bars
+    )
+
+    st.plotly_chart(fig)
+    with st.expander("📊 View Data"):
+        st.dataframe(temp_df)
+    st.markdown('---')
+
+
+
+
+    # Traffic Signal Vs Severity
+
+
+
+    temp_df = conn.execute("""  SELECT Traffic_Signal , AVG(Severity) AS 'Avg_Severity' FROM accidents.parquet 
+                                GROUP BY Traffic_Signal """).df()
+    
+
+    fig = px.bar(temp_df , x = 'Traffic_Signal' , y = 'Avg_Severity' , title='Traffic Signal Vs Severity')
+
+    fig.update_layout(
+    bargap=0.5,        # space between bars (0 → no gap, 1 → max gap)
+    bargroupgap=0.2    # gap between grouped bars
+    )
+
+    st.plotly_chart(fig)
+    with st.expander("📊 View Data"):
+        st.dataframe(temp_df)
+    st.markdown('---')
+
+    # Top Streets By accidents
+
+    temp_df = conn.execute("""    SELECT Street , COUNT(*) AS 'Count' FROM accidents.parquet
+                                    GROUP BY Street
+                                    ORDER BY Count DESC """).df()
+    
+    temp_df = temp_df.head(10)
+
+    fig = px.bar(temp_df , x = 'Count' , y = 'Street' , title='Top Streets By accidents')
+    st.plotly_chart(fig)
+    with st.expander("📊 View Data"):
+        st.dataframe(temp_df)
+    st.markdown('---')
+
+
+
+    # Interstate vs Regular Road
+
+    temp_df = conn.execute(""" SELECT Railway , COUNT(*) AS 'Count' FROM accidents.parquet
+                                GROUP BY Railway
+                                ORDER BY Count DESC """).df()
+
+    fig = px.pie(temp_df , values= 'Count' , names='Railway' , title='Railway vs Non Railway Road')
+    st.plotly_chart(fig)
+    with st.expander("📊 View Data"):
+        st.dataframe(temp_df)
+    st.markdown('---')
+
 
 elif page == 'Risk Report':
     st.title("⚠️ Risk Report")
 
+    # State Risk Score Ranking
+
+    temp_df = conn.execute(""" SELECT State , COUNT(*) AS 'Count' FROM accidents.parquet 
+                                GROUP BY State
+                                ORDER BY Count DESC""").df()
+    
+    temp_df = temp_df.head(10)
+    fig = px.bar(temp_df , x = 'State' , y = 'Count' , title='State Risk Score Ranking')
+    st.plotly_chart(fig)
+    with st.expander("📊 View Data"):
+        st.dataframe(temp_df)
+    st.markdown('---')
+
+    # Risk Score Components Table
+
+    temp_df = conn.execute(""" SELECT State , COUNT(*) AS 'Count' , AVG(Severity) AS 'Avg_Severity' FROM accidents.parquet
+                                GROUP BY State
+                                ORDER BY Count DESC""").df()
+    
+    fig = go.Figure(data=[go.Table(
+    header=dict(
+        values=['State', 'Count', 'Avg Severity'],
+        fill_color='darkblue',
+        font=dict(color='white', size=14),
+        align='center'
+    ),
+    cells=dict(
+        values=[
+            temp_df['State'],
+            temp_df['Count'],
+            temp_df['Avg_Severity']
+        ],
+        fill_color='black',
+        align='center'
+        )
+    )])
+
+    fig.update_layout(
+    title="State-wise Accident Summary"
+        )
+    st.plotly_chart(fig)
+    with st.expander("📊 View Data"):
+        st.dataframe(temp_df)
+    st.markdown('---')
 
 
 
+
+
+    # YoY Accident Change per State
+
+    # -------------------------------
+    # STEP 1: Fetch data
+    # -------------------------------
+    temp_df = conn.execute("""
+    SELECT 
+        State,
+        YEAR(CAST(Start_Time AS TIMESTAMP)) AS Year,
+        COUNT(*) AS Count
+    FROM accidents.parquet
+    GROUP BY State, Year
+    """).df()
+
+    # -------------------------------
+    # STEP 2: Sort data (IMPORTANT)
+    # -------------------------------
+    temp_df = temp_df.sort_values(['State', 'Year'])
+
+    # -------------------------------
+    # STEP 3: Calculate YoY %
+    # -------------------------------
+    temp_df['YoY_Percent'] = temp_df.groupby('State')['Count'].pct_change() * 100
+
+    # -------------------------------
+    # STEP 4: Remove NaN (first year)
+    # -------------------------------
+    temp_df = temp_df.dropna()
+
+    # -------------------------------
+    # STEP 5: Take latest YoY per state
+    # -------------------------------
+    latest_df = temp_df.sort_values('Year').groupby('State').tail(1)
+
+    # -------------------------------
+    # STEP 6: Select Top & Bottom states
+    # -------------------------------
+    top10 = latest_df.sort_values('YoY_Percent', ascending=False).head(10)
+    bottom10 = latest_df.sort_values('YoY_Percent').head(10)
+
+    plot_df = pd.concat([top10, bottom10])
+
+    # -------------------------------
+    # STEP 7: Optional cap (avoid extreme distortion)
+    # -------------------------------
+    plot_df['YoY_Percent'] = plot_df['YoY_Percent'].clip(-100, 100)
+
+    # -------------------------------
+    # STEP 8: Plot horizontal bar chart
+    # -------------------------------
+    fig = px.bar(
+        plot_df.sort_values('YoY_Percent'),
+        x='YoY_Percent',
+        y='State',
+        orientation='h',
+        title='YoY Accident Change per State (Top ↑ & Bottom ↓)',
+        color='YoY_Percent',
+        color_continuous_scale='RdYlGn_r'   # red = worse, green = better
+    )
+
+    # -------------------------------
+    # STEP 9: Improve layout
+    # -------------------------------
+    fig.update_layout(
+        # title_x=0.5,
+        height=600,
+        xaxis_title='YoY Change (%)',
+        yaxis_title='State'
+    )
+
+    # Add labels
+    fig.update_traces(
+        text=plot_df['YoY_Percent'].round(1),
+        textposition='outside'
+    )
+
+    # -------------------------------
+    # STEP 10: Show in Streamlit
+    # -------------------------------
+    st.plotly_chart(fig, use_container_width=True)
+
+
+
+
+
+
+
+
+
+    # States Excedding National severity average
+
+    national_average = conn.execute("""SELECT AVG(Severity) FROM accidents.parquet """).fetchone()[0]
+
+    temp_df = conn.execute(""" SELECT State , COUNT(*) AS 'Count' , AVG(Severity) AS 'Avg_Severity' FROM accidents.parquet
+                                GROUP BY State
+                                ORDER BY Count DESC""").df()
+
+    temp_df = temp_df[temp_df['Avg_Severity'] > national_average]
+
+    fig = go.Figure(data=[go.Table(
+    header=dict(
+        values=['State', 'Count', 'Avg Severity'],
+        fill_color='orange',
+        font=dict(color='white', size=14),
+        align='center'
+    ),
+    cells=dict(
+        values=[
+            temp_df['State'],
+            temp_df['Count'],
+            temp_df['Avg_Severity']
+        ],
+        fill_color='black',
+        align='center'
+        )
+    )])
+
+    fig.update_layout(
+    title="States Excedding National severity average"
+        )
+    st.plotly_chart(fig)
+    with st.expander("📊 View Data"):
+        st.dataframe(temp_df)
+    st.markdown('---')
+
+    # Severity 4 % per State
+
+    temp_df = conn.execute("""SELECT State , COUNT(*) AS 'Count' FROM accidents.parquet 
+                            WHERE Severity = 4
+                           GROUP BY State
+                           ORDER BY Count DESC """).df()
+    
+    fig = px.bar(temp_df , x = 'Count',y = 'State' , title= 'Severity 4 % per State')
+
+    fig.update_layout(
+        height = 900
+    )
+
+    st.plotly_chart(fig)
+    with st.expander("📊 View Data"):
+        st.dataframe(temp_df)
+    st.markdown('---')
+
+
+    # Month Peak per State
+
+    temp_df = conn.execute("""  SELECT State , MONTHNAME(CAST(Start_Time AS TIMESTAMP)) as 'Month_Name' , COUNT(*) as 'Count' FROM accidents.parquet
+                                GROUP BY State , MONTHNAME(CAST(Start_Time AS TIMESTAMP))
+                                ORDER BY  Count DESC """).df()
+
+    peak_df = temp_df.loc[
+    temp_df.groupby('State')['Count'].idxmax()
+        ]
+    
+
+    fig = go.Figure(data=[go.Table(
+    header=dict(
+        values=['State', 'Month_Name', 'Count'],
+        fill_color='lime',
+        font=dict(color='black', size=14),
+        align='center'
+    ),
+    cells=dict(
+        values=[
+            peak_df['State'],
+            peak_df['Month_Name'],
+            peak_df['Count']
+        ],
+        fill_color='black',
+        align='center'
+        )
+    )])
+
+    fig.update_layout(
+    title="Month Peak per State"
+        )
+    st.plotly_chart(fig)
+    with st.expander("📊 View Data"):
+        st.dataframe(peak_df)
+    st.markdown('---')
+
+
+    # Peak Hour per State
+
+    temp_df = conn.execute("""  SELECT State , HOUR(CAST(Start_Time AS TIMESTAMP)) as 'Hour' , COUNT(*) as 'Count' FROM accidents.parquet
+                                GROUP BY State , HOUR(CAST(Start_Time AS TIMESTAMP))
+                                ORDER BY  Count DESC """).df()
+
+    peak_df = temp_df.loc[
+    temp_df.groupby('State')['Count'].idxmax()
+        ]
+    
+
+    fig = go.Figure(data=[go.Table(
+    header=dict(
+        values=['State', 'Hour', 'Count'],
+        fill_color='teal',
+        font=dict(color='white', size=14),
+        align='center'
+    ),
+    cells=dict(
+        values=[
+            peak_df['State'],
+            peak_df['Hour'],
+            peak_df['Count']
+        ],
+        fill_color='black',
+        align='center'
+        )
+    )])
+
+    fig.update_layout(
+    title="Hour Peak per State"
+        )
+    st.plotly_chart(fig)
+    with st.expander("📊 View Data"):
+        st.dataframe(peak_df)
+    st.markdown('---')
+    
 
 
 
