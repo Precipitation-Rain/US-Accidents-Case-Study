@@ -1008,3 +1008,46 @@ elif page == "Risk Report":
             [peak_hour_df['State'], peak_hour_df['Hour'], peak_hour_df['Count']],
             '#2EC4B6', 'Peak Hour per State'
         ), use_container_width=True)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
